@@ -1,13 +1,14 @@
-#!/usr/bin/env node
-
 const { chromium } = require('playwright');
 const { program } = require('commander');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 
 // Configuration and data structures
 let testResults = [];
 let startTime;
 let endTime;
+let reportDir;
 
 // AI Model Configuration (using Hugging Face's free inference API)
 const AI_CONFIG = {
@@ -31,6 +32,7 @@ program
   .option('--users <number>', 'Number of simulated users', '5')
   .option('--duration <seconds>', 'Test duration in seconds', '60')
   .option('--ai-enabled', 'Enable AI-powered interactions', true)
+  .option('--report-dir <path>', 'Directory to save detailed reports', './stormbot-reports')
   .parse();
 
 const options = program.opts();
@@ -50,6 +52,103 @@ function getRandomScrollAmount() {
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Create report directory
+function createReportDirectory() {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  reportDir = path.join(options.reportDir, `test-${timestamp}`);
+  
+  if (!fs.existsSync(options.reportDir)) {
+    fs.mkdirSync(options.reportDir, { recursive: true });
+  }
+  if (!fs.existsSync(reportDir)) {
+    fs.mkdirSync(reportDir, { recursive: true });
+  }
+  
+  return reportDir;
+}
+
+// Enhanced error logging
+async function logError(page, userIndex, error, context = '') {
+  const errorData = {
+    timestamp: new Date().toISOString(),
+    userIndex,
+    error: error.message,
+    stack: error.stack,
+    context,
+    url: page.url(),
+    screenshot: null,
+    consoleLogs: [],
+    networkErrors: []
+  };
+
+  try {
+    // Only take screenshot if there's an actual error
+    if (error && error.message) {
+      const screenshotPath = path.join(reportDir, `error-user-${userIndex}-${Date.now()}.png`);
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+      errorData.screenshot = screenshotPath;
+    }
+  } catch (screenshotError) {
+    errorData.screenshot = 'Failed to capture screenshot';
+  }
+
+  return errorData;
+}
+
+// Enhanced console error collection
+async function setupErrorMonitoring(page, userIndex, userResults) {
+  // Console errors
+  page.on('console', msg => {
+    if (msg.type() === 'error') {
+      const errorInfo = {
+        timestamp: new Date().toISOString(),
+        message: msg.text(),
+        location: msg.location(),
+        type: msg.type(),
+        args: msg.args().map(arg => arg.toString())
+      };
+      userResults.consoleErrors.push(errorInfo);
+    }
+  });
+
+  // Page errors
+  page.on('pageerror', error => {
+    const errorInfo = {
+      timestamp: new Date().toISOString(),
+      message: error.message,
+      stack: error.stack,
+      type: 'pageerror'
+    };
+    userResults.pageErrors.push(errorInfo);
+  });
+
+  // Network errors
+  page.on('requestfailed', request => {
+    const errorInfo = {
+      timestamp: new Date().toISOString(),
+      url: request.url(),
+      method: request.method(),
+      failure: request.failure(),
+      headers: request.headers()
+    };
+    userResults.networkErrors.push(errorInfo);
+  });
+
+  // Response errors (4xx, 5xx)
+  page.on('response', response => {
+    if (response.status() >= 400) {
+      const errorInfo = {
+        timestamp: new Date().toISOString(),
+        url: response.url(),
+        status: response.status(),
+        statusText: response.statusText(),
+        headers: response.headers()
+      };
+      userResults.responseErrors.push(errorInfo);
+    }
+  });
 }
 
 // AI-powered content analysis
@@ -218,17 +317,37 @@ async function simulateUserInteraction(page, userIndex) {
     userIndex,
     pageLoadTime: 0,
     consoleErrors: [],
+    pageErrors: [],
+    networkErrors: [],
+    responseErrors: [],
     requests: 0,
     actions: [],
-    aiAnalysis: null
+    aiAnalysis: null,
+    performanceMetrics: {},
+    errorScreenshots: []
   };
 
   try {
+    // Set up comprehensive error monitoring
+    await setupErrorMonitoring(page, userIndex, userResults);
+
     // Measure page load time
     const loadStart = Date.now();
     await page.goto(options.url, { waitUntil: 'networkidle' });
     userResults.pageLoadTime = Date.now() - loadStart;
     userResults.actions.push('Page loaded');
+
+    // Capture performance metrics
+    const performance = await page.evaluate(() => {
+      const perf = performance.getEntriesByType('navigation')[0];
+      return {
+        domContentLoaded: perf.domContentLoadedEventEnd - perf.domContentLoadedEventStart,
+        loadComplete: perf.loadEventEnd - perf.loadEventStart,
+        firstContentfulPaint: performance.getEntriesByName('first-contentful-paint')[0]?.startTime || 0,
+        largestContentfulPaint: performance.getEntriesByName('largest-contentful-paint')[0]?.startTime || 0
+      };
+    });
+    userResults.performanceMetrics = performance;
 
     // AI-powered content analysis
     if (options.aiEnabled !== false) {
@@ -236,16 +355,6 @@ async function simulateUserInteraction(page, userIndex) {
       const strategy = await getAIInteractionStrategy(page, userResults.aiAnalysis);
       userResults.actions.push(`AI strategy: ${strategy.actions.join(', ')}`);
     }
-
-    // Listen for console errors
-    page.on('console', msg => {
-      if (msg.type() === 'error') {
-        userResults.consoleErrors.push({
-          message: msg.text(),
-          timestamp: Date.now()
-        });
-      }
-    });
 
     // Listen for network requests
     page.on('request', () => {
@@ -310,7 +419,11 @@ async function simulateUserInteraction(page, userIndex) {
               }
             }
           } catch (error) {
-            // Element might not be clickable, continue
+            // Log element interaction errors
+            const errorData = await logError(page, userIndex, error, `Element interaction: ${action}`);
+            if (errorData.screenshot) {
+              userResults.errorScreenshots.push(errorData);
+            }
           }
           break;
 
@@ -341,7 +454,10 @@ async function simulateUserInteraction(page, userIndex) {
               await sleep(3000);
             }
           } catch (error) {
-            // Search not available
+            const errorData = await logError(page, userIndex, error, 'Search interaction');
+            if (errorData.screenshot) {
+              userResults.errorScreenshots.push(errorData);
+            }
           }
           break;
 
@@ -355,7 +471,10 @@ async function simulateUserInteraction(page, userIndex) {
               userResults.actions.push('AI-filled form field');
             }
           } catch (error) {
-            // Form filling failed
+            const errorData = await logError(page, userIndex, error, 'Form filling');
+            if (errorData.screenshot) {
+              userResults.errorScreenshots.push(errorData);
+            }
           }
           break;
       }
@@ -365,6 +484,10 @@ async function simulateUserInteraction(page, userIndex) {
     }
 
   } catch (error) {
+    const errorData = await logError(page, userIndex, error, 'General simulation error');
+    if (errorData.screenshot) {
+      userResults.errorScreenshots.push(errorData);
+    }
     userResults.actions.push(`Error: ${error.message}`);
   }
 
@@ -379,6 +502,7 @@ async function runLoadTest() {
   console.log(`Users: ${options.users}`);
   console.log(`Duration: ${options.duration} seconds`);
   console.log(`AI Enabled: ${options.aiEnabled !== false ? 'Yes' : 'No'}`);
+  console.log(`Report Directory: ${createReportDirectory()}`);
   console.log('🤖 Using free AI model: Hugging Face BART-large-mnli');
   console.log('Starting test...\n');
 
@@ -419,18 +543,72 @@ async function runLoadTest() {
   }
 }
 
+// Generate detailed error report
+function generateErrorReport() {
+  const allErrors = {
+    consoleErrors: [],
+    pageErrors: [],
+    networkErrors: [],
+    responseErrors: [],
+    errorScreenshots: []
+  };
+
+  testResults.forEach(result => {
+    allErrors.consoleErrors.push(...result.consoleErrors);
+    allErrors.pageErrors.push(...result.pageErrors);
+    allErrors.networkErrors.push(...result.networkErrors);
+    allErrors.responseErrors.push(...result.responseErrors);
+    allErrors.errorScreenshots.push(...result.errorScreenshots);
+  });
+
+  const totalErrors = allErrors.consoleErrors.length + allErrors.pageErrors.length + 
+                     allErrors.networkErrors.length + allErrors.responseErrors.length;
+
+  // Only generate error report if there are actual errors
+  if (totalErrors === 0) {
+    return null;
+  }
+
+  const errorReport = {
+    summary: {
+      totalConsoleErrors: allErrors.consoleErrors.length,
+      totalPageErrors: allErrors.pageErrors.length,
+      totalNetworkErrors: allErrors.networkErrors.length,
+      totalResponseErrors: allErrors.responseErrors.length,
+      totalScreenshots: allErrors.errorScreenshots.length
+    },
+    details: allErrors
+  };
+
+  // Save detailed error report only if there are errors
+  const errorReportPath = path.join(reportDir, 'error-report.json');
+  fs.writeFileSync(errorReportPath, JSON.stringify(errorReport, null, 2));
+
+  return errorReport;
+}
+
 // Generate and display report
 function generateReport() {
   const totalDuration = Date.now() - startTime;
   const totalRequests = testResults.reduce((sum, result) => sum + result.requests, 0);
-  const totalErrors = testResults.reduce((sum, result) => sum + result.consoleErrors.length, 0);
+  const totalErrors = testResults.reduce((sum, result) => 
+    sum + result.consoleErrors.length + result.pageErrors.length + 
+    result.networkErrors.length + result.responseErrors.length, 0);
   const avgLoadTime = testResults.reduce((sum, result) => sum + result.pageLoadTime, 0) / testResults.length;
+
+  // Generate detailed error report
+  const errorReport = generateErrorReport();
 
   console.log('\n📊 Test Results Summary');
   console.log('======================');
   console.log(`Total Duration: ${(totalDuration / 1000).toFixed(2)} seconds`);
   console.log(`Total Requests: ${totalRequests}`);
-  console.log(`Total Console Errors: ${totalErrors}`);
+  console.log(`Total Errors: ${totalErrors}`);
+  console.log(`  - Console Errors: ${errorReport ? errorReport.summary.totalConsoleErrors : 0}`);
+  console.log(`  - Page Errors: ${errorReport ? errorReport.summary.totalPageErrors : 0}`);
+  console.log(`  - Network Errors: ${errorReport ? errorReport.summary.totalNetworkErrors : 0}`);
+  console.log(`  - Response Errors: ${errorReport ? errorReport.summary.totalResponseErrors : 0}`);
+  console.log(`  - Error Screenshots: ${errorReport ? errorReport.summary.totalScreenshots : 0}`);
   console.log(`Average Page Load Time: ${avgLoadTime.toFixed(2)}ms`);
   console.log(`Successful Users: ${testResults.filter(r => r.actions.length > 0).length}/${testResults.length}`);
 
@@ -452,28 +630,7 @@ function generateReport() {
     }
   }
 
-  console.log('\n📈 Per-User Breakdown:');
-  console.log('=====================');
-  testResults.forEach((result, index) => {
-    console.log(`\nUser ${result.userIndex}:`);
-    console.log(`  Page Load Time: ${result.pageLoadTime}ms`);
-    console.log(`  Requests: ${result.requests}`);
-    console.log(`  Console Errors: ${result.consoleErrors.length}`);
-    console.log(`  Actions Performed: ${result.actions.length}`);
-    
-    if (result.aiAnalysis) {
-      console.log(`  AI Detected: ${result.aiAnalysis.type} (${(result.aiAnalysis.confidence * 100).toFixed(1)}% confidence)`);
-    }
-    
-    if (result.consoleErrors.length > 0) {
-      console.log('  Errors:');
-      result.consoleErrors.forEach(error => {
-        console.log(`    - ${error.message}`);
-      });
-    }
-  });
-
-  // Performance insights
+  // Performance Insights
   console.log('\n💡 Performance Insights:');
   console.log('=======================');
   if (avgLoadTime > 3000) {
@@ -485,9 +642,9 @@ function generateReport() {
   }
 
   if (totalErrors > 0) {
-    console.log(`⚠️  ${totalErrors} console errors detected`);
+    console.log(`⚠️  ${totalErrors} errors detected - check detailed report`);
   } else {
-    console.log('✅ No console errors detected');
+    console.log('✅ No errors detected');
   }
 
   const requestsPerSecond = totalRequests / (totalDuration / 1000);
@@ -495,6 +652,66 @@ function generateReport() {
   
   if (options.aiEnabled !== false) {
     console.log('🤖 AI-powered interactions provided intelligent user simulation');
+  }
+
+  // Report file locations
+  console.log('\n📁 Detailed Reports Generated:');
+  console.log('==============================');
+  
+  // Always show the main test results file
+  console.log(`📊 Full Test Data: ${path.join(reportDir, 'test-results.json')}`);
+  
+  // Only show error-related files if there are actual errors
+  if (errorReport) {
+    console.log(`📄 Error Report: ${path.join(reportDir, 'error-report.json')}`);
+    console.log(`📸 Error Screenshots: ${reportDir}/`);
+  } else {
+    console.log('✅ No errors detected - no error reports generated');
+  }
+
+  // Save complete test results
+  const completeResults = {
+    testInfo: {
+      url: options.url,
+      users: options.users,
+      duration: options.duration,
+      aiEnabled: options.aiEnabled !== false,
+      startTime: new Date(startTime).toISOString(),
+      endTime: new Date(Date.now()).toISOString()
+    },
+    summary: {
+      totalDuration: totalDuration,
+      totalRequests: totalRequests,
+      totalErrors: totalErrors,
+      avgLoadTime: avgLoadTime,
+      successfulUsers: testResults.filter(r => r.actions.length > 0).length
+    },
+    results: testResults
+  };
+
+  const resultsPath = path.join(reportDir, 'test-results.json');
+  fs.writeFileSync(resultsPath, JSON.stringify(completeResults, null, 2));
+
+  // Show critical errors if any
+  if (errorReport && (errorReport.summary.totalPageErrors > 0 || errorReport.summary.totalResponseErrors > 0)) {
+    console.log('\n🚨 Critical Issues Detected:');
+    console.log('============================');
+    
+    if (errorReport.summary.totalPageErrors > 0) {
+      console.log('\n📄 Page Errors:');
+      errorReport.details.pageErrors.slice(0, 3).forEach(error => {
+        console.log(`  - ${error.message} (${error.timestamp})`);
+      });
+    }
+    
+    if (errorReport.summary.totalResponseErrors > 0) {
+      console.log('\n🌐 Response Errors:');
+      errorReport.details.responseErrors.slice(0, 3).forEach(error => {
+        console.log(`  - ${error.status} ${error.statusText}: ${error.url} (${error.timestamp})`);
+      });
+    }
+    
+    console.log(`\n📋 View complete error details in: ${path.join(reportDir, 'error-report.json')}`);
   }
 }
 
