@@ -1,4 +1,3 @@
-# api key = sk-koWMbDA1TzWYzMa7NIQN_Q
 
 # StormBot
 
