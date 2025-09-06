@@ -3,6 +3,7 @@ const { program } = require('commander');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { classifyPage, generatePersonaActions, summarizeError } = require('./blackbox');
 
 // Configuration and data structures
 let testResults = [];
@@ -10,18 +11,7 @@ let startTime;
 let endTime;
 let reportDir;
 
-// AI Model Configuration (using Hugging Face's free inference API)
-const AI_CONFIG = {
-  // Using a free text classification model for content analysis
-  modelUrl: 'https://api-inference.huggingface.co/models/facebook/bart-large-mnli',
-  // Alternative free models we can use:
-  // - 'microsoft/DialoGPT-medium' for conversation
-  // - 'distilbert-base-uncased' for text classification
-  // - 'gpt2' for text generation
-  headers: {
-    'Content-Type': 'application/json',
-  }
-};
+const BLACKBOX_API_KEY="sk-koWMbDA1TzWYzMa7NIQN_Q"
 
 // Parse command line arguments
 program
@@ -69,7 +59,7 @@ function createReportDirectory() {
   return reportDir;
 }
 
-// Enhanced error logging
+// Enhanced error logging with AI-powered summarization
 async function logError(page, userIndex, error, context = '') {
   const errorData = {
     timestamp: new Date().toISOString(),
@@ -80,7 +70,8 @@ async function logError(page, userIndex, error, context = '') {
     url: page.url(),
     screenshot: null,
     consoleLogs: [],
-    networkErrors: []
+    networkErrors: [],
+    aiSummary: null
   };
 
   try {
@@ -92,6 +83,20 @@ async function logError(page, userIndex, error, context = '') {
     }
   } catch (screenshotError) {
     errorData.screenshot = 'Failed to capture screenshot';
+  }
+
+  // Use BLACKBOX to summarize the error
+  try {
+    const errorContext = {
+      error: error.message,
+      stack: error.stack,
+      context,
+      url: page.url(),
+      userIndex
+    };
+    errorData.aiSummary = await summarizeError(errorContext);
+  } catch (summaryError) {
+    errorData.aiSummary = 'Failed to generate AI summary';
   }
 
   return errorData;
@@ -151,7 +156,6 @@ async function setupErrorMonitoring(page, userIndex, userResults) {
   });
 }
 
-// AI-powered content analysis
 async function analyzePageContent(page) {
   try {
     // Extract page content for AI analysis
@@ -163,118 +167,39 @@ async function analyzePageContent(page) {
       const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'))
         .map(el => el.textContent || el.getAttribute('aria-label') || '').join(' ');
       
-      return {
-        title,
-        headings,
-        buttons,
-        text: text.substring(0, 1000) // Limit text length for API
-      };
+      return `${title} ${headings} ${buttons} ${text.substring(0, 1000)}`;
     });
 
-    // Use free AI model to analyze content
-    const analysis = await callAIModel(pageContent);
-    return analysis;
+    // Use BLACKBOX API to classify page content
+    const pageType = await classifyPage(pageContent);
+    return { type: pageType, confidence: 1.0 };
   } catch (error) {
-    console.log('⚠️  AI analysis failed, falling back to basic interactions');
-    return { type: 'general', confidence: 0.5 };
+    console.log(`⚠️  BLACKBOX AI analysis failed, falling back to basic interactions: ${error}`);
+    return { type: 'other', confidence: 0.5 };
   }
 }
 
-// Call free AI model (Hugging Face inference API)
-async function callAIModel(content) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify({
-      inputs: `${content.title} ${content.headings} ${content.buttons}`,
-      parameters: {
-        candidate_labels: [
-          'e-commerce', 'blog', 'news', 'social media', 
-          'portfolio', 'landing page', 'dashboard', 'form'
-        ]
-      }
-    });
-
-    const options = {
-      hostname: 'api-inference.huggingface.co',
-      path: '/models/facebook/bart-large-mnli',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'StormBot-AI/1.0'
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let responseData = '';
-      
-      res.on('data', (chunk) => {
-        responseData += chunk;
-      });
-      
-      res.on('end', () => {
-        try {
-          const result = JSON.parse(responseData);
-          resolve({
-            type: result.labels[0],
-            confidence: result.scores[0],
-            raw: result
-          });
-        } catch (error) {
-          resolve({ type: 'general', confidence: 0.5 });
-        }
-      });
-    });
-
-    req.on('error', (error) => {
-      resolve({ type: 'general', confidence: 0.5 });
-    });
-
-    req.write(data);
-    req.end();
-  });
-}
-
-// AI-powered interaction strategy
 async function getAIInteractionStrategy(page, analysis) {
-  const strategies = {
-    'e-commerce': {
-      actions: ['scroll', 'click_products', 'search', 'add_to_cart'],
-      priorities: { scroll: 0.3, click_products: 0.4, search: 0.2, add_to_cart: 0.1 }
-    },
-    'blog': {
-      actions: ['scroll', 'read_content', 'click_links', 'share'],
-      priorities: { scroll: 0.4, read_content: 0.3, click_links: 0.2, share: 0.1 }
-    },
-    'news': {
-      actions: ['scroll', 'read_headlines', 'click_articles', 'search'],
-      priorities: { scroll: 0.3, read_headlines: 0.3, click_articles: 0.3, search: 0.1 }
-    },
-    'social media': {
-      actions: ['scroll', 'like', 'comment', 'share', 'follow'],
-      priorities: { scroll: 0.4, like: 0.2, comment: 0.2, share: 0.1, follow: 0.1 }
-    },
-    'landing page': {
-      actions: ['scroll', 'click_cta', 'fill_form', 'read_content'],
-      priorities: { scroll: 0.3, click_cta: 0.3, fill_form: 0.2, read_content: 0.2 }
-    },
-    'dashboard': {
-      actions: ['navigate', 'click_buttons', 'view_data', 'settings'],
-      priorities: { navigate: 0.3, click_buttons: 0.3, view_data: 0.2, settings: 0.2 }
-    },
-    'form': {
-      actions: ['fill_fields', 'submit', 'validation', 'reset'],
-      priorities: { fill_fields: 0.4, submit: 0.3, validation: 0.2, reset: 0.1 }
-    },
-    'general': {
+  try {
+    // Use BLACKBOX to generate persona actions
+    const role = 'customer'; // Default role, can be made configurable
+    const actions = await generatePersonaActions(role, analysis.type);
+    
+    console.log(`🤖 BLACKBOX AI detected: ${analysis.type} (confidence: ${(analysis.confidence * 100).toFixed(1)}%)`);
+    console.log(`🎯 Generated actions: ${actions.join(', ')}`);
+    
+    // Return a strategy object compatible with existing code
+    return {
+      actions: actions,
+      priorities: {} // Simplified, can be enhanced if needed
+    };
+  } catch (error) {
+    console.log(`⚠️  BLACKBOX persona generation failed, falling back to basic actions ${error}`);
+    return {
       actions: ['scroll', 'click', 'read', 'wait'],
       priorities: { scroll: 0.3, click: 0.3, read: 0.2, wait: 0.2 }
-    }
-  };
-
-  const strategy = strategies[analysis.type] || strategies.general;
-  console.log(`🤖 AI detected: ${analysis.type} (confidence: ${(analysis.confidence * 100).toFixed(1)}%)`);
-  console.log(`🎯 Using strategy: ${strategy.actions.join(', ')}`);
-  
-  return strategy;
+    };
+  }
 }
 
 // AI-powered element selection
@@ -503,7 +428,7 @@ async function runLoadTest() {
   console.log(`Duration: ${options.duration} seconds`);
   console.log(`AI Enabled: ${options.aiEnabled !== false ? 'Yes' : 'No'}`);
   console.log(`Report Directory: ${createReportDirectory()}`);
-  console.log('🤖 Using free AI model: Hugging Face BART-large-mnli');
+  console.log('🤖 Using BLACKBOX AI for all AI tasks');
   console.log('Starting test...\n');
 
   startTime = Date.now();
@@ -717,6 +642,17 @@ function generateReport() {
 
 // Main execution
 async function main() {
+  console.log("@@@@@@@@@@ main\n\n\n\n\n\\n\n");
+
+  // Check BLACKBOX API key
+  const apiKey = BLACKBOX_API_KEY;
+  if (!apiKey) {
+    console.log('⚠️  BLACKBOX_API_KEY environment variable is not set');
+    console.log('   AI features will fall back to basic interactions');
+  } else {
+    console.log('✅ BLACKBOX_API_KEY is set (length:', apiKey.length + ')');
+  }
+
   try {
     await runLoadTest();
     generateReport();
