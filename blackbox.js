@@ -3,13 +3,12 @@ const https = require('https');
 const API_HOST = 'api.blackbox.ai';
 const API_PATH_CHAT_COMPLETIONS = '/chat/completions';
 
-const BLACKBOX_API_KEY="sk-Aw4GMHjd7D8xRboFdt-AxQ"
+const apiKey = process.env.API_KEY;
 
 const url = 'https://api.blackbox.ai/chat/completions';
 
 function callBlackboxApi(path, data) {
   return new Promise((resolve, reject) => {
-    const apiKey = BLACKBOX_API_KEY;
     if (!apiKey) {
       console.log('❌ BLACKBOX_API_KEY is not set in environment variables');
       return reject(new Error('BLACKBOX_API_KEY is not set in environment variables'));
