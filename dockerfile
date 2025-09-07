@@ -40,8 +40,6 @@ RUN npx playwright install chromium
 
 COPY . .
 
-ENV BLACKBOX_API_KEY="sk-koWMbDA1TzWYzMa7NIQN_Q"
-
 # Note: Application code will be mounted via volume at runtime to avoid rebuilding on changes
 # Expose any ports if needed (StormBot is CLI, so usually none)
 
