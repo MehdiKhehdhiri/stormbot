@@ -2,6 +2,13 @@
 
 AI-powered load testing tool using Playwright.
 
+You know that sinking feeling when your site works perfectly... until real users show up?
+Maybe it's launch day.
+Your traffic spikes, your server hums like a space heater, and your logs light up with errors you've never seen before.
+The irony? You did load test.
+But your tool was just hammering your backend with bare HTTP requests - no scrolling, no clicking, no messy human behavior.
+And that's the problem: bots don't behave like people.
+That's why I built StormBot.
 ## Setup
 
 1. Create a `.env` file in the project root with the following content:
