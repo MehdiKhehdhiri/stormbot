@@ -12,7 +12,7 @@ let startTime;
 let endTime;
 let reportDir;
 
-const BLACKBOX_API_KEY="sk-koWMbDA1TzWYzMa7NIQN_Q"
+const BLACKBOX_API_KEY = process.env.API_KEY;
 
 // Parse command line arguments
 program
