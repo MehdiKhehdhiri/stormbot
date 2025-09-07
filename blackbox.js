@@ -3,7 +3,8 @@ const https = require('https');
 const API_HOST = 'api.blackbox.ai';
 const API_PATH_CHAT_COMPLETIONS = '/chat/completions';
 
-const BLACKBOX_API_KEY="API_KEY_HERE";
+const BLACKBOX_API_KEY="sk-Aw4GMHjd7D8xRboFdt-AxQ"
+
 const url = 'https://api.blackbox.ai/chat/completions';
 
 function callBlackboxApi(path, data) {
@@ -16,62 +17,36 @@ function callBlackboxApi(path, data) {
 
     const postData = JSON.stringify(data);
 
-    const options = {
-      hostname: API_HOST,
-      path,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-     //   'Content-Length': Buffer.byteLength(postData)
-      },
-      body: postData
-    };
-
     console.log(`🔗 Calling BLACKBOX API: ${API_HOST}${path}`);
     console.log(`📤 Request data:`, JSON.stringify(data, null, 2));
 
     fetch(url, {
-      ...options
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: postData
     })
-      .then(response => response.json())
-      .then(result => console.log(result, '\n\nmsg: ', result.choices[0].message))
-      .catch(error => console.error('Error: ', error));
-
-    // const req = https.request(options, (res) => {
-    //   let responseData = '';
-
-    //   console.log(`📥 Response status: ${res.statusCode}`);
-
-    //   res.on('data', (chunk) => {
-    //     responseData += chunk;
-    //   });
-
-    //   res.on('end', () => {
-    //     console.log(`📄 Raw response:`, responseData);
-    //     try {
-    //       const parsed = JSON.parse(responseData);
-    //       if (res.statusCode >= 200 && res.statusCode < 300) {
-    //         console.log('✅ BLACKBOX API call successful');
-    //         resolve(parsed);
-    //       } else {
-    //         console.log('❌ BLACKBOX API error response:', parsed);
-    //         reject(new Error(parsed.error || `BLACKBOX API error: ${res.statusCode}`));
-    //       }
-    //     } catch (err) {
-    //       console.log('❌ Failed to parse BLACKBOX API response:', err.message);
-    //       reject(new Error('Failed to parse BLACKBOX API response: ' + err.message));
-    //     }
-    //   });
-    // });
-
-    // req.on('error', (err) => {
-    //   console.log('❌ BLACKBOX API network error:', err.message);
-    //   reject(err);
-    // });
-
-    // // req.write(postData);
-    // req.end();
+      .then(response => {
+        console.log(`📥 Response status: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(result => {
+        console.log('✅ BLACKBOX API call successful');
+        console.log('📄 Response:', JSON.stringify(result, null, 2));
+        if (result.choices && result.choices.length > 0) {
+          console.log('msg:', result.choices[0].message);
+        }
+        resolve(result);
+      })
+      .catch(error => {
+        console.log('❌ BLACKBOX API error:', error.message);
+        reject(error);
+      });
   });
 }
 
@@ -119,5 +94,6 @@ async function summarizeError(errorContext) {
 module.exports = {
   classifyPage,
   generatePersonaActions,
-  summarizeError
+  summarizeError,
+  callBlackboxApi
 };

@@ -1,4 +1,3 @@
-
 # StormBot
 
 AI-powered load testing tool using Playwright.
@@ -15,7 +14,8 @@ docker build -t stormbot .
 
 ### Run the container with volume mount for development
 
-```bash
+```bashsk-koWMbDA1TzWYzMa7NIQN_Q
+
 docker run --rm -it -v $(pwd):/app stormbot --url https://example.com
 ```
 
@@ -26,3 +26,5 @@ This command mounts the current directory (`$(pwd)`) to `/app` inside the contai
 - The Dockerfile installs all dependencies and sets up the environment.
 - The application code is not copied into the image but mounted at runtime.
 - This setup is ideal for development. For production, you may want to build a full image with the code copied in.
+
+node stormbot.js --url https://42.fr --users 1 --duration 3

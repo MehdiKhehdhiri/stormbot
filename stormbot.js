@@ -3,7 +3,8 @@ const { program } = require('commander');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { classifyPage, generatePersonaActions, summarizeError } = require('./blackbox');
+const { classifyPage, generatePersonaActions, summarizeError, callBlackboxApi } = require('./blackbox');
+const BaseAgent = require('./agents/baseAgent');
 
 // Configuration and data structures
 let testResults = [];
@@ -158,6 +159,23 @@ async function setupErrorMonitoring(page, userIndex, userResults) {
 
 async function analyzePageContent(page) {
   try {
+    // Wait for page to load completely
+    await page.waitForLoadState('networkidle');
+
+    // Debug: Check if page has basic content
+    const pageInfo = await page.evaluate(() => {
+      return {
+        title: document.title,
+        bodyText: document.body ? document.body.innerText : 'No body',
+        hasHeadings: document.querySelectorAll('h1, h2, h3, h4, h5, h6').length,
+        hasButtons: document.querySelectorAll('button, a, [role="button"]').length,
+        url: window.location.href,
+        readyState: document.readyState
+      };
+    });
+
+    console.log('🔍 Page info:', pageInfo);
+
     // Extract page content for AI analysis
     const pageContent = await page.evaluate(() => {
       const text = document.body.innerText || '';
@@ -166,9 +184,11 @@ async function analyzePageContent(page) {
         .map(h => h.textContent).join(' ');
       const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'))
         .map(el => el.textContent || el.getAttribute('aria-label') || '').join(' ');
-      
+
       return `${title} ${headings} ${buttons} ${text.substring(0, 1000)}`;
     });
+
+    console.log('🔍 Extracted page content for classification:', pageContent ? pageContent.substring(0, 200) + '...' : 'EMPTY');
 
     // Use BLACKBOX API to classify page content
     const pageType = await classifyPage(pageContent);
@@ -179,22 +199,62 @@ async function analyzePageContent(page) {
   }
 }
 
-async function getAIInteractionStrategy(page, analysis) {
+// async function getAIInteractionStrategy(page, analysis) {
+//   try {
+//     // Use BLACKBOX to generate persona actions
+//     const role = generateAgent(content); // Default role, can be made configurable
+//     const actions = await generatePersonaActions(role, analysis.type);
+
+//     console.log(`🤖 BLACKBOX AI detected: ${analysis.type} (confidence: ${(analysis.confidence * 100).toFixed(1)}%)`);
+//     console.log(`🎯 Generated actions: ${actions.join(', ')}`);
+
+//     // Return a strategy object compatible with existing code
+//     return {
+//       actions: actions,
+//       priorities: {} // Simplified, can be enhanced if needed
+//     };
+//   } catch (error) {
+//     console.log(`⚠️  BLACKBOX persona generation failed, falling back to basic actions ${error}`);
+//     return {
+//       actions: ['scroll', 'click', 'read', 'wait'],
+//       priorities: { scroll: 0.3, click: 0.3, read: 0.2, wait: 0.2 }
+//     };
+//   }
+// }
+
+async function getAgentInteractionStrategy(page, agent, pageAnalysis) {
   try {
-    // Use BLACKBOX to generate persona actions
-    const role = 'customer'; // Default role, can be made configurable
-    const actions = await generatePersonaActions(role, analysis.type);
-    
-    console.log(`🤖 BLACKBOX AI detected: ${analysis.type} (confidence: ${(analysis.confidence * 100).toFixed(1)}%)`);
-    console.log(`🎯 Generated actions: ${actions.join(', ')}`);
-    
-    // Return a strategy object compatible with existing code
+    // Use BLACKBOX to generate agent-specific actions based on persona and persona
+    const actions = await generatePersonaActions(agent.name, pageAnalysis.type);
+
+    console.log(`🤖 Agent ${agent.name} (${agent.persona}) detected: ${pageAnalysis.type} (confidence: ${(pageAnalysis.confidence * 100).toFixed(1)}%)`);
+    console.log(`🎯 Generated agent actions: ${actions.join(', ')}`);
+
+    // Customize priorities based on agent persona
+    let priorities = {};
+    switch (agent.name) {
+      case 'new user':
+        priorities = { scroll: 0.4, click: 0.3, read: 0.2, wait: 0.1 };
+        break;
+      case 'power user':
+        priorities = { click: 0.4, search: 0.3, fill_form: 0.2, scroll: 0.1 };
+        break;
+      case 'admin':
+        priorities = { click: 0.5, fill_form: 0.3, search: 0.2 };
+        break;
+      case 'error tester':
+        priorities = { fill_form: 0.4, search: 0.3, click: 0.3 };
+        break;
+      default:
+        priorities = { scroll: 0.3, click: 0.3, read: 0.2, wait: 0.2 };
+    }
+
     return {
       actions: actions,
-      priorities: {} // Simplified, can be enhanced if needed
+      priorities: priorities
     };
   } catch (error) {
-    console.log(`⚠️  BLACKBOX persona generation failed, falling back to basic actions ${error}`);
+    console.log(`⚠️  Agent ${agent.name} strategy generation failed, falling back to basic actions ${error}`);
     return {
       actions: ['scroll', 'click', 'read', 'wait'],
       priorities: { scroll: 0.3, click: 0.3, read: 0.2, wait: 0.2 }
@@ -237,9 +297,11 @@ async function selectAIElements(page, strategy) {
 }
 
 // Simulate AI-powered user interactions
-async function simulateUserInteraction(page, userIndex) {
-  const userResults = {
-    userIndex,
+async function simulateAgentInteraction(page, agentIndex, agent, pageAnalysis) {
+  const agentResults = {
+    agentIndex,
+    agentName: agent.name,
+    agentPersona: agent.persona,
     pageLoadTime: 0,
     consoleErrors: [],
     pageErrors: [],
@@ -247,20 +309,30 @@ async function simulateUserInteraction(page, userIndex) {
     responseErrors: [],
     requests: 0,
     actions: [],
-    aiAnalysis: null,
+    aiAnalysis: pageAnalysis,
     performanceMetrics: {},
-    errorScreenshots: []
+    errorScreenshots: [],
+    modelUsed: 'blackboxai/openai/gpt-4', // Default model
+    costEstimate: 0
   };
 
   try {
     // Set up comprehensive error monitoring
-    await setupErrorMonitoring(page, userIndex, userResults);
+    await setupErrorMonitoring(page, agentIndex, agentResults);
 
     // Measure page load time
     const loadStart = Date.now();
-    await page.goto(options.url, { waitUntil: 'networkidle' });
-    userResults.pageLoadTime = Date.now() - loadStart;
-    userResults.actions.push('Page loaded');
+    console.log(`🌐 Navigating to: ${options.url}`);
+    const response = await page.goto(options.url, { waitUntil: 'networkidle' });
+    agentResults.pageLoadTime = Date.now() - loadStart;
+
+    console.log(`📄 Page navigation response:`, {
+      status: response ? response.status() : 'No response',
+      url: page.url(),
+      title: await page.title()
+    });
+
+    agentResults.actions.push('Page loaded');
 
     // Capture performance metrics
     const performance = await page.evaluate(() => {
@@ -272,18 +344,17 @@ async function simulateUserInteraction(page, userIndex) {
         largestContentfulPaint: performance.getEntriesByName('largest-contentful-paint')[0]?.startTime || 0
       };
     });
-    userResults.performanceMetrics = performance;
+    agentResults.performanceMetrics = performance;
 
-    // AI-powered content analysis
+    // Use provided page analysis and generate agent-specific strategy
     if (options.aiEnabled !== false) {
-      userResults.aiAnalysis = await analyzePageContent(page);
-      const strategy = await getAIInteractionStrategy(page, userResults.aiAnalysis);
-      userResults.actions.push(`AI strategy: ${strategy.actions.join(', ')}`);
+      const strategy = await getAgentInteractionStrategy(page, agent, pageAnalysis);
+      agentResults.actions.push(`Agent strategy (${agent.name}): ${strategy.actions.join(', ')}`);
     }
 
     // Listen for network requests
     page.on('request', () => {
-      userResults.requests++;
+      agentResults.requests++;
     });
 
     // Get page dimensions
@@ -292,17 +363,17 @@ async function simulateUserInteraction(page, userIndex) {
       height: document.documentElement.scrollHeight
     }));
 
-    // AI-powered interaction loop
+    // Agent-powered interaction loop
     while (Date.now() < endTime) {
       let action;
-      
-      if (userResults.aiAnalysis && userResults.aiAnalysis.confidence > 0.6) {
-        // Use AI strategy for high-confidence analysis
-        const strategy = await getAIInteractionStrategy(page, userResults.aiAnalysis);
+
+      if (pageAnalysis && pageAnalysis.confidence > 0.6) {
+        // Use agent-specific strategy for high-confidence analysis
+        const strategy = await getAgentInteractionStrategy(page, agent, pageAnalysis);
         const actions = strategy.actions;
         const priorities = strategy.priorities;
-        
-        // Weighted random selection based on AI priorities
+
+        // Weighted random selection based on agent priorities
         const rand = Math.random();
         let cumulative = 0;
         for (const [actionType, priority] of Object.entries(priorities)) {
@@ -322,7 +393,7 @@ async function simulateUserInteraction(page, userIndex) {
         case 'scroll':
           const scrollY = getRandomInt(0, Math.max(0, dimensions.height - 800));
           await page.evaluate(y => window.scrollTo(0, y), scrollY);
-          userResults.actions.push(`AI-scrolled to ${scrollY}px`);
+          agentResults.actions.push(`Agent (${agent.name})-scrolled to ${scrollY}px`);
           break;
 
         case 2:
@@ -331,23 +402,23 @@ async function simulateUserInteraction(page, userIndex) {
         case 'click_cta':
         case 'click_articles':
           try {
-            const elements = await selectAIElements(page, userResults.aiAnalysis ? 
-              await getAIInteractionStrategy(page, userResults.aiAnalysis) : null);
-            
+            const elements = await selectAIElements(page, pageAnalysis ?
+              await getAgentInteractionStrategy(page, agent, pageAnalysis) : null);
+
             if (elements.length > 0) {
               const randomElement = elements[getRandomInt(0, elements.length - 1)];
               const isVisible = await randomElement.isVisible();
               if (isVisible) {
                 await randomElement.click();
-                userResults.actions.push(`AI-clicked: ${action}`);
+                agentResults.actions.push(`Agent (${agent.name})-clicked: ${action}`);
                 await sleep(2000);
               }
             }
           } catch (error) {
             // Log element interaction errors
-            const errorData = await logError(page, userIndex, error, `Element interaction: ${action}`);
+            const errorData = await logError(page, agentIndex, error, `Element interaction: ${action}`);
             if (errorData.screenshot) {
-              userResults.errorScreenshots.push(errorData);
+              agentResults.errorScreenshots.push(errorData);
             }
           }
           break;
@@ -359,29 +430,29 @@ async function simulateUserInteraction(page, userIndex) {
           // Simulate reading behavior
           const readTime = getRandomInt(2000, 8000);
           await sleep(readTime);
-          userResults.actions.push(`AI-read for ${readTime}ms`);
+          agentResults.actions.push(`Agent (${agent.name})-read for ${readTime}ms`);
           break;
 
         case 4:
         case 'wait':
           const waitTime = getRandomDelay();
           await sleep(waitTime);
-          userResults.actions.push(`AI-waited ${waitTime}ms`);
+          agentResults.actions.push(`Agent (${agent.name})-waited ${waitTime}ms`);
           break;
 
         case 'search':
           try {
             const searchBox = await page.$('input[type="search"], input[name*="search"], .search-input');
             if (searchBox) {
-              await searchBox.fill('test query');
+              await searchBox.fill(`${agent.name} test query`);
               await searchBox.press('Enter');
-              userResults.actions.push('AI-searched');
+              agentResults.actions.push(`Agent (${agent.name})-searched`);
               await sleep(3000);
             }
           } catch (error) {
-            const errorData = await logError(page, userIndex, error, 'Search interaction');
+            const errorData = await logError(page, agentIndex, error, 'Search interaction');
             if (errorData.screenshot) {
-              userResults.errorScreenshots.push(errorData);
+              agentResults.errorScreenshots.push(errorData);
             }
           }
           break;
@@ -392,13 +463,13 @@ async function simulateUserInteraction(page, userIndex) {
             const inputs = await page.$$('input[type="text"], input[type="email"], textarea');
             if (inputs.length > 0) {
               const randomInput = inputs[getRandomInt(0, inputs.length - 1)];
-              await randomInput.fill('test data');
-              userResults.actions.push('AI-filled form field');
+              await randomInput.fill(`${agent.name} test data`);
+              agentResults.actions.push(`Agent (${agent.name})-filled form field`);
             }
           } catch (error) {
-            const errorData = await logError(page, userIndex, error, 'Form filling');
+            const errorData = await logError(page, agentIndex, error, 'Form filling');
             if (errorData.screenshot) {
-              userResults.errorScreenshots.push(errorData);
+              agentResults.errorScreenshots.push(errorData);
             }
           }
           break;
@@ -409,22 +480,60 @@ async function simulateUserInteraction(page, userIndex) {
     }
 
   } catch (error) {
-    const errorData = await logError(page, userIndex, error, 'General simulation error');
+    const errorData = await logError(page, agentIndex, error, 'General simulation error');
     if (errorData.screenshot) {
-      userResults.errorScreenshots.push(errorData);
+      agentResults.errorScreenshots.push(errorData);
     }
-    userResults.actions.push(`Error: ${error.message}`);
+    agentResults.actions.push(`Error: ${error.message}`);
   }
 
-  return userResults;
+  return agentResults;
+}
+
+
+async function generateAgent(content, number) {
+  const data = {
+    model: 'blackboxai/openai/gpt-4',
+    messages: [{
+      role: 'user',
+      content: `Generate a list of ${number} agents with random realistic names and personas to test the webpage described by: ${content}.
+        Use these persona ratios:
+        - ~45% main target for the website (most relevant personas),
+        - ~30% other persona with focus on forms or any other interactions,
+        - ~25% random users/testers/others to examine.
+
+        Output one agent per line in this exact format:
+        {AgentName}-{Persona}
+
+        Example:
+        Bob Bobb-shopper
+        Christiano Ronaldo-tester
+        Elon Musk-admin`
+    }]
+  }
+  let agents = [];
+  const response = await callBlackboxApi("", data);
+  console.log('\n@@@\nresponse: ', response);
+  console.log('\n@@@@@\nmsg: ', response.choices[0].message.content);
+  if (response.choices && response.choices.length > 0) {
+    response.choices[0].message.content.split('\n').forEach((tuple) => {
+      const agent = tuple.split('-');
+      agents.push(new BaseAgent(
+        agent[0],
+        agent[1]
+      ));
+    });
+    console.log(agents);
+    return agents;
+  }
 }
 
 // Main test execution
 async function runLoadTest() {
-  console.log('🌩️  StormBot - AI-Powered Load Testing');
-  console.log('=====================================');
+  console.log('🌩️  StormBot - AI-Powered Load Testing with Multi-Agent Architecture');
+  console.log('=====================================================================');
   console.log(`Target URL: ${options.url}`);
-  console.log(`Users: ${options.users}`);
+  console.log(`Agents: ${options.users}`);
   console.log(`Duration: ${options.duration} seconds`);
   console.log(`AI Enabled: ${options.aiEnabled !== false ? 'Yes' : 'No'}`);
   console.log(`Report Directory: ${createReportDirectory()}`);
@@ -435,11 +544,47 @@ async function runLoadTest() {
   endTime = startTime + (parseInt(options.duration) * 1000);
 
   const browsers = [];
-  const userPromises = [];
+  const agentPromises = [];
+
+  // Define agent personas
+  // const agentPersonas = [
+  //   { name: 'new user', persona: 'explore basic features' },
+  //   { name: 'power user', persona: 'perform advanced tasks' },
+  //   { name: 'admin', persona: 'manage system settings' },
+  //   { name: 'error tester', persona: 'trigger error scenarios' }
+  // ];
 
   try {
-    // Launch browsers for each user
-    for (let i = 0; i < parseInt(options.users); i++) {
+    // Initial page analysis agent
+    const browser = await chromium.launch({ 
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    browsers.push(browser);
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    console.log('🔍 Running initial page analysis agent...');
+
+    // Navigate to the target URL first
+    console.log(`🌐 Initial analysis: Navigating to ${options.url}`);
+    const navResponse = await page.goto(options.url, { waitUntil: 'networkidle', timeout: 30000 });
+    console.log(`📄 Initial navigation response:`, {
+      status: navResponse ? navResponse.status() : 'No response',
+      url: page.url(),
+      title: await page.title()
+    });
+
+    const pageAnalysis = await analyzePageContent(page);
+    console.log(`Initial page analysis result: ${JSON.stringify(pageAnalysis)}`);
+
+    // Close initial analysis browser
+    await browser.close();
+    browsers.pop();
+
+    const agents = await generateAgent(pageAnalysis.type, options.users);
+    
+    for (let i = 0; i < options.users; i++) {
       const browser = await chromium.launch({ 
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -449,13 +594,13 @@ async function runLoadTest() {
       const context = await browser.newContext();
       const page = await context.newPage();
 
-      // Start user simulation
-      const userPromise = simulateUserInteraction(page, i + 1);
-      userPromises.push(userPromise);
+      // Start agent simulation with persona and persona
+      const agentPromise = simulateAgentInteraction(page, i + 1, agents[i], pageAnalysis);
+      agentPromises.push(agentPromise);
     }
 
-    // Wait for all users to complete
-    const results = await Promise.all(userPromises);
+    // Wait for all agents to complete
+    const results = await Promise.all(agentPromises);
     testResults = results;
 
   } catch (error) {
@@ -510,6 +655,47 @@ function generateErrorReport() {
   fs.writeFileSync(errorReportPath, JSON.stringify(errorReport, null, 2));
 
   return errorReport;
+}
+
+// Generate agent-specific reports
+function generateAgentReport() {
+  console.log('\n🤖 Agent Performance Report');
+  console.log('===========================');
+
+  if (testResults.length === 0) {
+    console.log('No agent results available');
+    return;
+  }
+
+  testResults.forEach((result, index) => {
+    console.log(`\nAgent ${index + 1}: ${result.agentName} (${result.agentPersona})`);
+    console.log(`  - Actions performed: ${result.actions.length}`);
+    console.log(`  - Page load time: ${result.pageLoadTime}ms`);
+    console.log(`  - Requests made: ${result.requests}`);
+    console.log(`  - Errors: ${result.consoleErrors.length + result.pageErrors.length + result.networkErrors.length + result.responseErrors.length}`);
+
+    if (result.aiAnalysis) {
+      console.log(`  - Page type detected: ${result.aiAnalysis.type}`);
+    }
+  });
+
+  // Save agent report
+  const agentReport = {
+    timestamp: new Date().toISOString(),
+    agents: testResults.map(result => ({
+      name: result.agentName,
+      persona: result.agentPersona,
+      actions: result.actions.length,
+      loadTime: result.pageLoadTime,
+      requests: result.requests,
+      errors: result.consoleErrors.length + result.pageErrors.length + result.networkErrors.length + result.responseErrors.length,
+      pageType: result.aiAnalysis ? result.aiAnalysis.type : 'unknown'
+    }))
+  };
+
+  const agentReportPath = path.join(reportDir, 'agent-report.json');
+  fs.writeFileSync(agentReportPath, JSON.stringify(agentReport, null, 2));
+  console.log(`\n📄 Agent report saved: ${agentReportPath}`);
 }
 
 // Generate and display report
@@ -642,7 +828,6 @@ function generateReport() {
 
 // Main execution
 async function main() {
-  console.log("@@@@@@@@@@ main\n\n\n\n\n\\n\n");
 
   // Check BLACKBOX API key
   const apiKey = BLACKBOX_API_KEY;
@@ -655,6 +840,7 @@ async function main() {
 
   try {
     await runLoadTest();
+    await generateAgentReport();
     generateReport();
   } catch (error) {
     console.error('❌ Fatal error:', error.message);
