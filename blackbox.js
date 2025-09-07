@@ -3,8 +3,7 @@ const https = require('https');
 const API_HOST = 'api.blackbox.ai';
 const API_PATH_CHAT_COMPLETIONS = '/chat/completions';
 
-const BLACKBOX_API_KEY="sk-koWMbDA1TzWYzMa7NIQN_Q"
-
+const BLACKBOX_API_KEY="API_KEY_HERE"
 const url = 'https://api.blackbox.ai/chat/completions';
 
 function callBlackboxApi(path, data) {
