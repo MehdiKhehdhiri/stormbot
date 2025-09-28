@@ -1,0 +1,156 @@
+{
+  "testInfo": {
+    "url": "https://mehdi-portfolio-beta.vercel.app/",
+    "users": "3",
+    "duration": "60",
+    "aiEnabled": true,
+    "startTime": "2025-09-28T22:00:34.380Z",
+    "endTime": "2025-09-28T22:01:38.099Z"
+  },
+  "summary": {
+    "totalDuration": 63718,
+    "totalRequests": 0,
+    "totalErrors": 3,
+    "avgLoadTime": 13061,
+    "successfulUsers": 3
+  },
+  "results": [
+    {
+      "agentIndex": 1,
+      "agentName": "John Smith",
+      "agentPersona": "Investor (main target)",
+      "pageLoadTime": 13288,
+      "consoleErrors": [
+        {
+          "timestamp": "2025-09-28T22:00:51.373Z",
+          "message": "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values. xt",
+          "location": {
+            "url": "https://mehdi-portfolio-beta.vercel.app/assets/index-2feb63eb.js",
+            "lineNumber": 70,
+            "columnNumber": 108966
+          },
+          "type": "error",
+          "args": [
+            "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values.",
+            "xt"
+          ]
+        }
+      ],
+      "pageErrors": [],
+      "networkErrors": [],
+      "responseErrors": [],
+      "requests": 0,
+      "actions": [
+        "Page loaded",
+        "Agent strategy (John Smith): John Smith clicked on 'Portfolio', John Smith scrolled through the portfolio images, John Smith clicked on the image details",
+        "Agent (John Smith)-read for 3293ms",
+        "Agent (John Smith)-waited 2224ms",
+        "Agent (John Smith)-scrolled to 425px"
+      ],
+      "aiAnalysis": {
+        "type": "portfolio page",
+        "confidence": 1
+      },
+      "performanceMetrics": {
+        "domContentLoaded": 0,
+        "loadComplete": 0,
+        "firstContentfulPaint": 432,
+        "largestContentfulPaint": 0
+      },
+      "errorScreenshots": [],
+      "modelUsed": "blackboxai/openai/gpt-4",
+      "costEstimate": 0
+    },
+    {
+      "agentIndex": 2,
+      "agentName": "Kimberly Johnson",
+      "agentPersona": " UI/UX Designer (other persona focusing on forms)",
+      "pageLoadTime": 7422,
+      "consoleErrors": [
+        {
+          "timestamp": "2025-09-28T22:00:51.749Z",
+          "message": "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values. xt",
+          "location": {
+            "url": "https://mehdi-portfolio-beta.vercel.app/assets/index-2feb63eb.js",
+            "lineNumber": 70,
+            "columnNumber": 108966
+          },
+          "type": "error",
+          "args": [
+            "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values.",
+            "xt"
+          ]
+        }
+      ],
+      "pageErrors": [],
+      "networkErrors": [],
+      "responseErrors": [],
+      "requests": 0,
+      "actions": [
+        "Page loaded",
+        "Agent strategy (Kimberly Johnson): Kimberly Johnson clicks on the 'About Me' section of the portfolio page, Kimberly Johnson scrolls through the portfolio gallery to view images, Kimberly Johnson selects a project from the portfolio for detailed view",
+        "Agent (Kimberly Johnson)-clicked: click",
+        "Agent (Kimberly Johnson)-clicked: click"
+      ],
+      "aiAnalysis": {
+        "type": "portfolio page",
+        "confidence": 1
+      },
+      "performanceMetrics": {
+        "domContentLoaded": 0,
+        "loadComplete": 0,
+        "firstContentfulPaint": 584,
+        "largestContentfulPaint": 0
+      },
+      "errorScreenshots": [],
+      "modelUsed": "blackboxai/openai/gpt-4",
+      "costEstimate": 0
+    },
+    {
+      "agentIndex": 3,
+      "agentName": "Jackie Chen",
+      "agentPersona": "Random user/tester",
+      "pageLoadTime": 18473,
+      "consoleErrors": [
+        {
+          "timestamp": "2025-09-28T22:00:53.370Z",
+          "message": "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values. xt",
+          "location": {
+            "url": "https://mehdi-portfolio-beta.vercel.app/assets/index-2feb63eb.js",
+            "lineNumber": 70,
+            "columnNumber": 108966
+          },
+          "type": "error",
+          "args": [
+            "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values.",
+            "xt"
+          ]
+        }
+      ],
+      "pageErrors": [],
+      "networkErrors": [],
+      "responseErrors": [],
+      "requests": 0,
+      "actions": [
+        "Page loaded",
+        "Agent strategy (Jackie Chen): User scrolls through the portfolio images, User clicks on a specific movie trailer from the portfolio, User leaves a review or comment about a specific portfolio item",
+        "Agent (Jackie Chen)-waited 2148ms",
+        "Agent (Jackie Chen)-waited 1016ms",
+        "Agent (Jackie Chen)-scrolled to 4490px"
+      ],
+      "aiAnalysis": {
+        "type": "portfolio page",
+        "confidence": 1
+      },
+      "performanceMetrics": {
+        "domContentLoaded": 0.10000000009313226,
+        "loadComplete": 0,
+        "firstContentfulPaint": 2048,
+        "largestContentfulPaint": 0
+      },
+      "errorScreenshots": [],
+      "modelUsed": "blackboxai/openai/gpt-4",
+      "costEstimate": 0
+    }
+  ]
+}

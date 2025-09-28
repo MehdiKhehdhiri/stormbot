@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StormBot - AI-Powered Load Testing Dashboard</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌩️</text></svg>">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">🌩️</span>
+                    <h1>StormBot</h1>
+                    <span class="tagline">AI-Powered Load Testing</span>
+                </div>
+                <div class="header-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Active Tests</span>
+                        <span class="stat-value" id="active-tests-count">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Status</span>
+                        <span class="stat-value status-indicator" id="system-status">Ready</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Navigation Tabs -->
+            <nav class="tab-navigation">
+                <button class="tab-button active" data-tab="dashboard">
+                    <span class="tab-icon">📊</span>
+                    Dashboard
+                </button>
+                <button class="tab-button" data-tab="new-test">
+                    <span class="tab-icon">🚀</span>
+                    New Test
+                </button>
+                <button class="tab-button" data-tab="reports">
+                    <span class="tab-icon">📋</span>
+                    Reports
+                </button>
+                <button class="tab-button" data-tab="settings">
+                    <span class="tab-icon">⚙️</span>
+                    Settings
+                </button>
+            </nav>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                <!-- Dashboard Tab -->
+                <div class="tab-panel active" id="dashboard-panel">
+                    <div class="dashboard-grid">
+                        <!-- Active Tests Section -->
+                        <section class="dashboard-card active-tests-card">
+                            <div class="card-header">
+                                <h2>🔄 Active Tests</h2>
+                                <div class="card-actions">
+                                    <button class="btn btn-secondary" id="refresh-tests">
+                                        <span class="btn-icon">🔄</span>
+                                        Refresh
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-content">
+                                <div id="active-tests-list" class="active-tests-list">
+                                    <div class="empty-state">
+                                        <span class="empty-icon">🌤️</span>
+                                        <p>No active tests running</p>
+                                        <button class="btn btn-primary" onclick="switchTab('new-test')">Start New Test</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Real-time Metrics -->
+                        <section class="dashboard-card metrics-card">
+                            <div class="card-header">
+                                <h2>📈 Real-time Metrics</h2>
+                            </div>
+                            <div class="card-content">
+                                <div class="metrics-grid">
+                                    <div class="metric-item">
+                                        <div class="metric-value" id="total-requests">0</div>
+                                        <div class="metric-label">Total Requests</div>
+                                    </div>
+                                    <div class="metric-item">
+                                        <div class="metric-value" id="total-errors">0</div>
+                                        <div class="metric-label">Errors</div>
+                                    </div>
+                                    <div class="metric-item">
+                                        <div class="metric-value" id="avg-response-time">0ms</div>
+                                        <div class="metric-label">Avg Response</div>
+                                    </div>
+                                    <div class="metric-item">
+                                        <div class="metric-value" id="active-agents">0</div>
+                                        <div class="metric-label">Active Agents</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Live Chart -->
+                        <section class="dashboard-card chart-card">
+                            <div class="card-header">
+                                <h2>📊 Performance Chart</h2>
+                            </div>
+                            <div class="card-content">
+                                <canvas id="performance-chart"></canvas>
+                            </div>
+                        </section>
+
+                        <!-- Live Logs -->
+                        <section class="dashboard-card logs-card">
+                            <div class="card-header">
+                                <h2>📝 Live Logs</h2>
+                                <div class="card-actions">
+                                    <button class="btn btn-secondary" id="clear-logs">
+                                        <span class="btn-icon">🗑️</span>
+                                        Clear
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-content">
+                                <div id="live-logs" class="logs-container">
+                                    <div class="log-entry system">
+                                        <span class="log-time">[System]</span>
+                                        <span class="log-message">StormBot Dashboard ready. Start a new test to see live updates.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+
+                <!-- New Test Tab -->
+                <div class="tab-panel" id="new-test-panel">
+                    <div class="test-config-container">
+                        <section class="config-card">
+                            <div class="card-header">
+                                <h2>🚀 Configure New Test</h2>
+                            </div>
+                            <div class="card-content">
+                                <form id="test-config-form" class="test-form">
+                                    <div class="form-group">
+                                        <label for="test-url">Target URL *</label>
+                                        <input type="url" id="test-url" name="url" required 
+                                               placeholder="https://example.com" 
+                                               class="form-input">
+                                        <small class="form-help">The website URL to test</small>
+                                    </div>
+
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="test-users">Number of Users</label>
+                                            <input type="number" id="test-users" name="users" 
+                                                   min="1" max="50" value="5" class="form-input">
+                                            <small class="form-help">Simulated concurrent users (1-50)</small>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="test-duration">Duration (seconds)</label>
+                                            <select id="test-duration" name="duration" class="form-select">
+                                                <option value="30">30 seconds</option>
+                                                <option value="60" selected>1 minute</option>
+                                                <option value="300">5 minutes</option>
+                                                <option value="600">10 minutes</option>
+                                                <option value="custom">Custom</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group" id="custom-duration-group" style="display: none;">
+                                        <label for="custom-duration">Custom Duration (seconds)</label>
+                                        <input type="number" id="custom-duration" name="customDuration" 
+                                               min="10" max="3600" value="60" class="form-input">
+                                    </div>
+
+                                    <div class="form-group">
+                                        <div class="checkbox-group">
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="ai-enabled" name="aiEnabled" checked>
+                                                <span class="checkbox-custom"></span>
+                                                Enable AI-Powered Interactions
+                                            </label>
+                                            <small class="form-help">Use BlackBox AI for intelligent user behavior simulation</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="report-dir">Report Directory</label>
+                                        <input type="text" id="report-dir" name="reportDir" 
+                                               value="./stormbot-reports" class="form-input">
+                                        <small class="form-help">Directory to save test reports</small>
+                                    </div>
+
+                                    <div class="form-actions">
+                                        <button type="submit" class="btn btn-primary btn-large">
+                                            <span class="btn-icon">🚀</span>
+                                            Start Load Test
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" id="test-preview">
+                                            <span class="btn-icon">👁️</span>
+                                            Preview Configuration
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </section>
+
+                        <!-- Test Preview -->
+                        <section class="config-card" id="test-preview-card" style="display: none;">
+                            <div class="card-header">
+                                <h2>👁️ Test Preview</h2>
+                            </div>
+                            <div class="card-content">
+                                <div id="test-preview-content" class="preview-content">
+                                    <!-- Preview content will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+
+                <!-- Reports Tab -->
+                <div class="tab-panel" id="reports-panel">
+                    <div class="reports-container">
+                        <section class="dashboard-card">
+                            <div class="card-header">
+                                <h2>📋 Test Reports</h2>
+                                <div class="card-actions">
+                                    <button class="btn btn-secondary" id="refresh-reports">
+                                        <span class="btn-icon">🔄</span>
+                                        Refresh
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-content">
+                                <div id="reports-list" class="reports-list">
+                                    <div class="loading-state">
+                                        <span class="loading-spinner">⏳</span>
+                                        <p>Loading reports...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div class="tab-panel" id="settings-panel">
+                    <div class="settings-container">
+                        <section class="config-card">
+                            <div class="card-header">
+                                <h2>⚙️ Settings</h2>
+                            </div>
+                            <div class="card-content">
+                                <div class="settings-form">
+                                    <div class="form-group">
+                                        <label for="api-key">BlackBox AI API Key</label>
+                                        <input type="password" id="api-key" name="apiKey" 
+                                               placeholder="Enter your API key" class="form-input">
+                                        <small class="form-help">Required for AI-powered features</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="default-users">Default Number of Users</label>
+                                        <input type="number" id="default-users" name="defaultUsers" 
+                                               min="1" max="50" value="5" class="form-input">
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="default-duration">Default Test Duration</label>
+                                        <select id="default-duration" name="defaultDuration" class="form-select">
+                                            <option value="30">30 seconds</option>
+                                            <option value="60" selected>1 minute</option>
+                                            <option value="300">5 minutes</option>
+                                            <option value="600">10 minutes</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <div class="checkbox-group">
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="auto-refresh" name="autoRefresh" checked>
+                                                <span class="checkbox-custom"></span>
+                                                Auto-refresh Dashboard
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-actions">
+                                        <button type="button" class="btn btn-primary" id="save-settings">
+                                            <span class="btn-icon">💾</span>
+                                            Save Settings
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="config-card">
+                            <div class="card-header">
+                                <h2>ℹ️ About StormBot</h2>
+                            </div>
+                            <div class="card-content">
+                                <div class="about-content">
+                                    <p><strong>StormBot</strong> is an AI-powered load testing tool that simulates realistic user behavior using Playwright and BlackBox AI.</p>
+                                    
+                                    <h3>Key Features:</h3>
+                                    <ul>
+                                        <li>🤖 AI-powered user behavior simulation</li>
+                                        <li>👥 Multi-agent architecture with different personas</li>
+                                        <li>📊 Real-time performance monitoring</li>
+                                        <li>🔍 Comprehensive error tracking</li>
+                                        <li>📈 Detailed reporting and analytics</li>
+                                        <li>🌐 Web-based dashboard interface</li>
+                                    </ul>
+
+                                    <div class="version-info">
+                                        <p><strong>Version:</strong> 1.0.0</p>
+                                        <p><strong>Engine:</strong> Playwright + BlackBox AI</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">Modal Title</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-content" id="modal-content">
+                <!-- Modal content will be populated by JavaScript -->
+            </div>
+            <div class="modal-actions" id="modal-actions">
+                <!-- Modal actions will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+{
+  "summary": {
+    "totalConsoleErrors": 3,
+    "totalPageErrors": 0,
+    "totalNetworkErrors": 0,
+    "totalResponseErrors": 0,
+    "totalScreenshots": 0
+  },
+  "details": {
+    "consoleErrors": [
+      {
+        "timestamp": "2025-09-28T22:00:51.373Z",
+        "message": "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values. xt",
+        "location": {
+          "url": "https://mehdi-portfolio-beta.vercel.app/assets/index-2feb63eb.js",
+          "lineNumber": 70,
+          "columnNumber": 108966
+        },
+        "type": "error",
+        "args": [
+          "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values.",
+          "xt"
+        ]
+      },
+      {
+        "timestamp": "2025-09-28T22:00:51.749Z",
+        "message": "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values. xt",
+        "location": {
+          "url": "https://mehdi-portfolio-beta.vercel.app/assets/index-2feb63eb.js",
+          "lineNumber": 70,
+          "columnNumber": 108966
+        },
+        "type": "error",
+        "args": [
+          "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values.",
+          "xt"
+        ]
+      },
+      {
+        "timestamp": "2025-09-28T22:00:53.370Z",
+        "message": "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values. xt",
+        "location": {
+          "url": "https://mehdi-portfolio-beta.vercel.app/assets/index-2feb63eb.js",
+          "lineNumber": 70,
+          "columnNumber": 108966
+        },
+        "type": "error",
+        "args": [
+          "THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN. The \"position\" attribute is likely to have NaN values.",
+          "xt"
+        ]
+      }
+    ],
+    "pageErrors": [],
+    "networkErrors": [],
+    "responseErrors": [],
+    "errorScreenshots": []
+  }
+}

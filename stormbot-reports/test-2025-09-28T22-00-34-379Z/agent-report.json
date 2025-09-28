@@ -1,0 +1,32 @@
+{
+  "timestamp": "2025-09-28T22:01:38.097Z",
+  "agents": [
+    {
+      "name": "John Smith",
+      "persona": "Investor (main target)",
+      "actions": 5,
+      "loadTime": 13288,
+      "requests": 0,
+      "errors": 1,
+      "pageType": "portfolio page"
+    },
+    {
+      "name": "Kimberly Johnson",
+      "persona": " UI/UX Designer (other persona focusing on forms)",
+      "actions": 4,
+      "loadTime": 7422,
+      "requests": 0,
+      "errors": 1,
+      "pageType": "portfolio page"
+    },
+    {
+      "name": "Jackie Chen",
+      "persona": "Random user/tester",
+      "actions": 5,
+      "loadTime": 18473,
+      "requests": 0,
+      "errors": 1,
+      "pageType": "portfolio page"
+    }
+  ]
+}

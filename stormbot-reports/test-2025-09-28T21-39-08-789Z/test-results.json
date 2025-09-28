@@ -1,0 +1,18 @@
+{
+  "testInfo": {
+    "url": "https://mehdi-portfolio-beta.vercel.app/",
+    "users": "5",
+    "duration": "60",
+    "aiEnabled": true,
+    "startTime": "2025-09-28T21:39:08.790Z",
+    "endTime": "2025-09-28T21:39:08.809Z"
+  },
+  "summary": {
+    "totalDuration": 18,
+    "totalRequests": 0,
+    "totalErrors": 0,
+    "avgLoadTime": null,
+    "successfulUsers": 0
+  },
+  "results": []
+}
