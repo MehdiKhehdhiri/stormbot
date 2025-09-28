@@ -156,4 +156,4 @@ For heavy load testing usage:
 ## 📞 Support
 
 - Vercel Documentation: https://vercel.com/docs
-- StormBot Issues: Create issues in your GitHub repository
+- StormBot Issues: Create issues in GitHub repository
